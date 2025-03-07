@@ -63,7 +63,7 @@ def main():
             api_version='v1',
             kind='PersistentVolumeClaim',
             metadata=k8s_client.V1ObjectMeta(
-                name='replication-' + name,
+                generate_name='replication-' + name + '-',
                 namespace=args.namespace,
                 owner_references=owner,
             ),
@@ -80,11 +80,12 @@ def main():
         )
 
         # Create the clone
-        corev1.create_namespaced_persistent_volume_claim(
+        claim = corev1.create_namespaced_persistent_volume_claim(
             claim.metadata.namespace,
             claim,
         )
         cloned_claims[name] = claim.metadata.name
+        logger.info("Cloned %s to %s", name, claim.metadata.name)
 
     # Assemble the copy script
     ssh = 'ssh -i /var/run/secrets/replication/upload-key'
@@ -164,7 +165,7 @@ def main():
         api_version='batch/v1',
         kind='Job',
         metadata=k8s_client.V1ObjectMeta(
-            name='replication-copy',
+            generate_name='replication-copy-',
             namespace=args.namespace,
             owner_references=owner,
         ),
@@ -181,10 +182,11 @@ def main():
         ),
     )
     batchv1 = k8s_client.BatchV1Api()
-    batchv1.create_namespaced_job(
+    job = batchv1.create_namespaced_job(
         body=job,
         namespace=args.namespace,
     )
+    logger.info("Created copy job %s", job.metadata.name)
 
 
 if __name__ == '__main__':
