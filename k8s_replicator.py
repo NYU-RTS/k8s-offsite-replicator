@@ -172,6 +172,7 @@ def main():
         spec=k8s_client.V1JobSpec(
             active_deadline_seconds=3600,
             backoff_limit=3,
+            ttl_seconds_after_finished=3600,
             template=k8s_client.V1PodTemplateSpec(
                 spec=k8s_client.V1PodSpec(
                     restart_policy='Never',
