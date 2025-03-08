@@ -94,8 +94,8 @@ def main():
         'mkdir /root/.ssh',
         'printf \'%s\\n\' "${HOST_KEY}" > /root/.ssh/known_hosts',
     ]
-    # First, mark remote copy as incomplete
-    script.append(ssh + ' ${TARGET} "rm -f ${TARGET_PATH}/ready"')
+    # First, mark as copying
+    script.append(ssh + ' ${TARGET} "sh -ec \\"mv ${TARGET_PATH}/ready ${TARGET_PATH}/copying || test -e ${TARGET_PATH}/copying; date > ${TARGET_PATH}/copying\\""')
     # Then copy each PVC
     volume_mounts = []
     volumes = []
@@ -123,6 +123,7 @@ def main():
         )
     # Finally, mark remote copy as complete
     script.append(ssh + ' ${TARGET} "touch ${TARGET_PATH}/ready"')
+    script.append(ssh + ' ${TARGET} "mv ${TARGET_PATH}/copying ${TARGET_PATH}/ready"')
 
     # Create the copy job
     volume_mounts.append(
