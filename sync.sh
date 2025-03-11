@@ -2,6 +2,8 @@
 
 set -eu
 
+KUBECONFIG=/root/.kube/config
+
 # First, mark the copy as snapshotting
 mv /netbox/replicated/ready /netbox/replicated/snapshotting || test -e /netbox/replicated/snapshotting
 
@@ -15,8 +17,9 @@ if [ "$OLD_SNAP" = "$NEW_SNAP" ]; then
 fi
 echo "Proceeding with snapshot, replacing $OLD_SNAP with $NEW_SNAP..."
 
-# Then stop the cluster
-sudo -u ubuntu -g docker -H minikube stop
+# Then stop NetBox
+kubectl -n hsrn-netbox scale deploy/hsrn-netbox deploy/hsrn-netbox-worker sts/hsrn-netbox-postgresql sts/hsrn-netbox-redis-master --replicas=0
+kubectl -n hsrn-netbox wait --for=delete --timeout=120s pod --all
 
 # Remove the previous snapshot
 umount /kube/netbox
@@ -27,8 +30,8 @@ lvcreate -n localcopy --snapshot data/replicated
 lvchange -ay -k n data/localcopy
 mount -o discard /dev/data/localcopy /kube/netbox
 
-# Restart the cluster
-sudo -u ubuntu -g docker -H minikube start --kubernetes-version=1.30.10 --driver=docker --nodes=1 --memory=no-limit --mount-string=/kube:/kube --mount --ports=0.0.0.0:80:32080 --ports=0.0.0.0:443:32043
-
-# Finally, mark the copy as ready
+# Mark the copy as ready
 mv /netbox/replicated/snapshotting /netbox/replicated/ready
+
+# Restart the cluster
+kubectl -n hsrn-netbox scale deploy/hsrn-netbox deploy/hsrn-netbox-worker sts/hsrn-netbox-postgresql sts/hsrn-netbox-redis-master --replicas=1
