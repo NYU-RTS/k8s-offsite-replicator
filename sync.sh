@@ -5,6 +5,16 @@ set -eu
 # First, mark the copy as snapshotting
 mv /netbox/replicated/ready /netbox/replicated/snapshotting || test -e /netbox/replicated/snapshotting
 
+# Then, compare the last copy date
+OLD_SNAP="$(cat /kube/netbox/snapshotting)"
+NEW_SNAP="$(cat /netbox/replicated/snapshotting)"
+if [ "$OLD_SNAP" = "$NEW_SNAP" ]; then
+    echo "No change" >&2
+    mv /netbox/replicated/snapshotting /netbox/replicated/ready
+    exit 0
+fi
+echo "Proceeding with snapshot, replacing $OLD_SNAP with $NEW_SNAP..."
+
 # Then stop the cluster
 sudo -u ubuntu -g docker -H minikube stop
 
