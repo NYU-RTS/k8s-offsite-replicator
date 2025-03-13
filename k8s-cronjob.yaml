@@ -1,0 +1,73 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: replicate-to-gcp
+  namespace: hsrn-netbox
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["create", "get"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: replicate-to-gcp
+  namespace: hsrn-netbox
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: replicate-to-gcp
+subjects:
+  - kind: ServiceAccount
+    name: replicate-to-gcp
+    namespace: hsrn-netbox
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: replicate-to-gcp
+  namespace: hsrn-netbox
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: replicate-to-gcp
+  namespace: hsrn-netbox
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 3600
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 3600
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: replicate-to-gcp
+          containers:
+            - name: replicator
+              image: ghcr.io/nyu-rts/k8s-offsite-replicator:v0.0.0-11-g5f75444
+              imagePullPolicy: IfNotPresent
+              args:
+                - --target
+                - netbox-upload@10.144.64.227
+                - --target-path
+                - /netbox/replicated
+                - --namespace
+                - hsrn-netbox
+                - data-hsrn-netbox-postgresql-0
+                - hsrn-netbox-media
+              env:
+                - name: OWNER_JOB
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.labels['job-name']
+          securityContext:
+            runAsNonRoot: true
+  schedule: "17 */3 * * *"
+  successfulJobsHistoryLimit: 2
