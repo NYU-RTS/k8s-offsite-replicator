@@ -163,7 +163,12 @@ def main():
             ),
             k8s_client.V1EnvVar(
                 name='HOST_KEY',
-                value="10.144.64.227 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL56p9h1LtsjTK+RdcrhnOjgbUfTdANf74+nhozAtGNh",
+                value_from=k8s_client.V1EnvVarSource(
+                    secret_key_ref=k8s_client.V1SecretKeySelector(
+                        name='replication',
+                        key='host-pubkey',
+                    ),
+                ),
             ),
         ],
         volume_mounts=volume_mounts,
