@@ -34,19 +34,25 @@ def main():
         logger.info("Using in-cluster config")
         k8s_config.load_incluster_config()
 
-    # Get current Job identity, to set as owner for other objects
-    if 'OWNER_JOB' in os.environ:
-        owner = {
-            'apiVersion': 'batch/v1',
-            'blockOwnerDeletion': true,
-            'kind': 'Job',
-            'name': os.environ['OWNER_JOB'],
-        }
-    else:
-        owner = None
-
     api = k8s_client.ApiClient()
     corev1 = k8s_client.CoreV1Api(api)
+    batchv1 = k8s_client.BatchV1Api()
+
+    # Get current Job identity, to set as owner for other objects
+    if 'OWNER_JOB' in os.environ:
+        parent_job = batchv1.read_namespaced_job(
+            os.environ['OWNER_JOB'],
+            args.namespace,
+        )
+        owner = [k8s_client.V1OwnerReference(
+            api_version='batch/v1',
+            block_owner_deletion=True,
+            kind='Job',
+            name=parent_job.metadata.name,
+            uid=parent_job.metadata.uid,
+        )]
+    else:
+        owner = None
 
     # Clone the PersistentVolumeClaims
     cloned_claims = {}
@@ -183,7 +189,6 @@ def main():
             ),
         ),
     )
-    batchv1 = k8s_client.BatchV1Api()
     job = batchv1.create_namespaced_job(
         body=job,
         namespace=args.namespace,
