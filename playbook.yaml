@@ -15,6 +15,10 @@
           - docker
         append: true
 
+    - name: add uploader user
+      user:
+        name: uploader
+
     - name: install minikube
       get_url:
         url: "https://github.com/kubernetes/minikube/releases/download/v{{ minikube_version }}/minikube-linux-amd64"
@@ -82,6 +86,11 @@
             path: "{{ synctarget_mountpoint }}/ready"
             state: touch
 
+        - name: give write access to uploader user
+          file:
+            owner: uploader
+            path: /kube/localcopy
+            recurse: true
 
         - name: create localcopy LV
           command: "lvcreate -n {{ lvm_local_lv }} -V {{ lvm_lv_size }} --thinpool {{ lvm_thinpool }} {{ lvm_vg }}"
