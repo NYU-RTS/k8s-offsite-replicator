@@ -51,7 +51,7 @@ spec:
           serviceAccountName: replicate-to-gcp
           containers:
             - name: replicator
-              image: ghcr.io/nyu-rts/k8s-offsite-replicator:v0.0.0-11-g5f75444
+              image: ghcr.io/nyu-rts/k8s-offsite-replicator:v0.0.0-15-g0092451
               imagePullPolicy: IfNotPresent
               args:
                 - --target
