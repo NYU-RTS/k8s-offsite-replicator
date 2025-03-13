@@ -94,11 +94,10 @@ def main():
         logger.info("Cloned %s to %s", name, claim.metadata.name)
 
     # Assemble the copy script
-    ssh = 'ssh -i /var/run/secrets/replication/upload-key'
+    ssh = 'ssh -i /var/run/secrets/replication/upload-key -o GlobalKnownHostsFile=/var/run/secrets/replication/host-pubkey'
     script = [
         'set -eu',
         'mkdir /root/.ssh',
-        'printf \'%s\\n\' "${HOST_KEY}" > /root/.ssh/known_hosts',
     ]
     # First, mark as copying
     script.append(ssh + ' ${TARGET} "sh -ec \\"mv ${TARGET_PATH}/ready ${TARGET_PATH}/copying || test -e ${TARGET_PATH}/copying; date > ${TARGET_PATH}/copying\\""')
@@ -160,15 +159,6 @@ def main():
             k8s_client.V1EnvVar(
                 name='TARGET_PATH',
                 value=args.target_path,
-            ),
-            k8s_client.V1EnvVar(
-                name='HOST_KEY',
-                value_from=k8s_client.V1EnvVarSource(
-                    secret_key_ref=k8s_client.V1SecretKeySelector(
-                        name='replication',
-                        key='host-pubkey',
-                    ),
-                ),
             ),
         ],
         volume_mounts=volume_mounts,
