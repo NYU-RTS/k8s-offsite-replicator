@@ -1,0 +1,109 @@
+- hosts: all
+  tasks:
+    - name: install packages
+      apt:
+        state: present
+        name:
+          - docker.io
+          - acl # Used by ansible_become
+        update_cache: true
+
+    - name: create minikube user
+      user:
+        name: minikube
+        groups:
+          - docker
+        append: true
+
+    - name: install minikube
+      get_url:
+        url: "https://github.com/kubernetes/minikube/releases/download/v{{ minikube_version }}/minikube-linux-amd64"
+        dest: /usr/local/bin/minikube
+        mode: "0755"
+
+    - name: install kubectl
+      get_url:
+        url: "https://dl.k8s.io/release/v{{ kubernetes_version }}/bin/linux/amd64/kubectl"
+        dest: /usr/local/bin/kubectl
+        mode: "0755"
+
+    - name: create mount points
+      file:
+        path: "{{ item }}"
+        state: directory
+      loop:
+        - /kube/localcopy
+        - "{{ synctarget_mountpoint }}"
+
+    - name: check for minikube cluster
+      command: "minikube status -p minikube"
+      vars:
+        ansible_become: true
+        ansible_become_user: minikube
+      register: check_minikube
+      ignore_errors: true
+
+    - name: create minikube cluster
+      command: "minikube start --kubernetes-version={{ kubernetes_version }} --driver=docker --nodes=1 --memory=no-limit --mount-string=/kube:/kube:rshared --mount --ports=0.0.0.0:80:32080"
+      vars:
+        ansible_become: true
+        ansible_become_user: minikube
+      when: check_minikube.rc != 0
+
+    - name: check for volume group
+      command: "vgdisplay {{ lvm_vg }}"
+      register: check_vg
+      ignore_errors: true
+
+    - name: do LVM setup
+      when: check_vg.rc != 0
+      block:
+        - name: create volume group
+          command: "vgcreate {{ lvm_vg }} {{ lvm_disk }}"
+
+        - name: get volume group extents
+          shell: "vgs --separator , --noheadings --options vg_name,vg_free_count | sed -n 's/^\\s*{{ lvm_vg }},\\([0-9]\\+\\)$/\\1/p'"
+          register: vg_extents
+
+        - name: create lvmthin pool
+          command: "lvcreate --type thin-pool -n {{ lvm_thinpool }} -l {{ vg_extents.stdout|int - (vg_extents.stdout|int // 10) * 2 }} --poolmetadatasize {{ (vg_extents.stdout|int // 10) * 4 }}M {{ lvm_vg }}"
+
+        - name: create synctarget LV
+          command: "lvcreate -n {{ lvm_synctarget_lv }} -V {{ lvm_lv_size }} --thinpool {{ lvm_thinpool }} {{ lvm_vg }}"
+
+        - name: create synctarget filesystem
+          command: "mkfs.ext4 /dev/{{ lvm_vg }}/{{ lvm_synctarget_lv }}"
+
+        - name: mount synctarget LV
+          command: "mount -o discard /dev/{{ lvm_vg }}/{{ lvm_synctarget_lv }} {{ synctarget_mountpoint }}"
+
+        - name: initialize synctarget LV
+          file:
+            path: "{{ synctarget_mountpoint }}/ready"
+            state: touch
+
+
+        - name: create localcopy LV
+          command: "lvcreate -n {{ lvm_local_lv }} -V {{ lvm_lv_size }} --thinpool {{ lvm_thinpool }} {{ lvm_vg }}"
+
+        - name: create localcopy filesystem
+          command: "mkfs.ext4 /dev/{{ lvm_vg }}/{{ lvm_local_lv }}"
+
+        - name: mount localcopy LV
+          command: "mount -o discard /dev/{{ lvm_vg }}/{{ lvm_local_lv }} /kube/localcopy"
+
+        - name: initialize localcopy LV
+          file:
+            path: "/kube/localcopy/snapshotting"
+            state: touch
+
+    - name: create sync script
+      template:
+        src: ansible_files/sync.sh
+        dest: /root/sync.sh
+        mode: "0755"
+
+    - name: create crontab config
+      template:
+        src: ansible_files/cron-sync
+        dest: /etc/cron.d/sync
